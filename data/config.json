@@ -1,0 +1,14 @@
+[
+  {
+    "name": "name_1",
+    "url": "url1",
+    "xpath-to-open-in-full-screen": "//div[@class='container']",
+    "xpath-webcam-container": "//div[@class='container']"
+  },
+  {
+    "name": "name_2",
+    "url": "url2",
+    "xpath-to-open-in-full-screen": "//div[@class='container']",
+    "xpath-webcam-container": "//div[@class='container']"
+  }
+]
