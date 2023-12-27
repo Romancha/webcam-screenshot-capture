@@ -83,6 +83,9 @@ func main() {
 }
 
 func saveWebCamScreenshot(cam WebCam) {
+	ctxCancel, cancelContext := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancelContext()
+
 	options := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", true),
 		chromedp.Flag("disable-gpu", false),
@@ -90,12 +93,7 @@ func saveWebCamScreenshot(cam WebCam) {
 		chromedp.Flag("disable-extensions", false),
 	)
 
-	// RemoteAllocatorOptions are the options for the remote allocator.
-	// Enable GPU
-	//var options []chromedp.RemoteAllocatorOption
-
-	//allocCtx, cancel := chromedp.NewRemoteAllocator(context.Background(), "ws://browser:9222/", options...)
-	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), options...)
+	allocCtx, cancel := chromedp.NewExecAllocator(ctxCancel, options...)
 	defer cancel()
 
 	// create context
@@ -110,18 +108,21 @@ func saveWebCamScreenshot(cam WebCam) {
 		chromedp.Sleep(5*time.Second),
 	)
 	if err != nil {
-		log.Fatal("[ERROR] Error navigating to the video page: ", err)
+		log.Printf("[ERROR] Error navigating to the video page: %s", err)
+		return
 	}
 
 	// capture screenshot of the video
 	var buf []byte
 	if err := chromedp.Run(ctx, elementScreenshot(cam, &buf)); err != nil {
-		log.Fatal("[ERROR] Error capturing screenshot: ", err)
+		log.Printf("[ERROR] Error capturing screenshot: %s", err)
+		return
 	}
 
 	jpgImage, err := bimg.NewImage(buf).Convert(bimg.JPEG)
 	if err != nil {
 		log.Printf("[ERROR] Error converting image: %s", err)
+		return
 	}
 
 	compressOptions := bimg.Options{
@@ -132,6 +133,7 @@ func saveWebCamScreenshot(cam WebCam) {
 	compressedImage, err := bimg.Resize(jpgImage, compressOptions)
 	if err != nil {
 		log.Printf("[ERROR] Error compressing image: %s", err)
+		return
 	}
 
 	screenshotName := cam.Name + "_" + time.Now().Format("2006-01-02_15-04-05") + ".jpg"
@@ -140,12 +142,14 @@ func saveWebCamScreenshot(cam WebCam) {
 
 	if err != nil {
 		log.Printf("[ERROR] Error writing image: %s. %s", screenshotName, err)
-	} else {
-		// Add the date watermark
-		err = addDateWatermark(path, path)
-		if err != nil {
-			log.Printf("[ERROR] Error adding watermark: %s", err)
-		}
+		return
+	}
+
+	// Add the date watermark
+	err = addDateWatermark(path, path)
+	if err != nil {
+		log.Printf("[ERROR] Error adding watermark: %s", err)
+		return
 	}
 
 	log.Printf("[INFO] Saved screenshot to " + path)
