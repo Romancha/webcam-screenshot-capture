@@ -10,6 +10,8 @@ import (
 	"github.com/jessevdk/go-flags"
 	"log"
 	"math/rand"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"time"
 )
@@ -30,7 +32,8 @@ var opts struct {
 
 	SavePath string `long:"save-path" env:"SAVE_PATH" description:"Save path" default:"./data/webcam-screenshots"`
 
-	Debug bool `long:"debug" env:"DEBUG" description:"debug mode"`
+	Debug   bool `long:"debug" env:"DEBUG" description:"debug mode"`
+	Profile bool `long:"profile" env:"PROFILE" description:"profile mode"`
 }
 
 func main() {
@@ -43,6 +46,15 @@ func main() {
 	setupLog(opts.Debug)
 
 	log.Printf("[INFO] opts: %+v", opts)
+
+	if opts.Profile {
+		go func() {
+			err := http.ListenAndServe(":8080", nil)
+			if err != nil {
+				log.Fatalf("[ERROR] failed to start pprof: %v", err)
+			}
+		}()
+	}
 
 	config, err := os.ReadFile(opts.ConfigPath)
 	if err != nil {
