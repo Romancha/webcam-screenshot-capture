@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/chromedp/chromedp"
+	"github.com/fogleman/gg"
 	"github.com/go-pkgz/lgr"
 	"github.com/h2non/bimg"
 	"github.com/jessevdk/go-flags"
@@ -30,7 +31,9 @@ var opts struct {
 	CaptureDelayFrom int    `long:"capture-delay-from" env:"CAPTURE_DELAY_FROM" description:"Capture delay from" default:"280"`
 	CaptureDelayTo   int    `long:"capture-delay-to" env:"CAPTURE_DELAY_TO" description:"Capture delay to" default:"300"`
 
-	SavePath string `long:"save-path" env:"SAVE_PATH" description:"Save path" default:"./data/webcam-screenshots"`
+	SavePath          string `long:"save-path" env:"SAVE_PATH" description:"Save path" default:"./data/webcam-screenshots"`
+	FontPath          string `long:"font-path" env:"FONT_PATH" description:"Font path" default:"./data/Roboto-Bold.ttf"`
+	WaterMarkTimezone string `long:"watermark-timezone" env:"WATERMARK_TIMEZONE" description:"Watermark timezone" default:"Europe/Moscow"`
 
 	Debug   bool `long:"debug" env:"DEBUG" description:"debug mode"`
 	Profile bool `long:"profile" env:"PROFILE" description:"profile mode"`
@@ -137,6 +140,12 @@ func saveWebCamScreenshot(cam WebCam) {
 
 	if err != nil {
 		log.Printf("[ERROR] Error writing image: %s. %s", screenshotName, err)
+	} else {
+		// Add the date watermark
+		err = addDateWatermark(path, path)
+		if err != nil {
+			log.Printf("[ERROR] Error adding watermark: %s", err)
+		}
 	}
 
 	log.Printf("[INFO] Saved screenshot to " + path)
@@ -149,6 +158,39 @@ func elementScreenshot(cam WebCam, res *[]byte) chromedp.Tasks {
 	return chromedp.Tasks{
 		chromedp.Screenshot(cam.XpathWebcamContainer, res),
 	}
+}
+
+func addDateWatermark(imagePath string, outputPath string) error {
+	// Load the image
+	img, err := gg.LoadImage(imagePath)
+	if err != nil {
+		return err
+	}
+
+	// Create a new context with the same size as the image
+	var W = float64(img.Bounds().Size().X)
+	var H = float64(img.Bounds().Size().Y)
+	dc := gg.NewContext(int(W), int(H))
+
+	// Draw the image onto the context
+	dc.DrawImage(img, 0, 0)
+
+	// Set the font style, size, and color for the watermark text
+	if err := dc.LoadFontFace(opts.FontPath, 35); err != nil {
+		log.Printf("[ERROR] Error loading font: %s", err)
+	}
+	dc.SetRGB(1, 0, 0)
+
+	// Write the current date as a string onto the context
+	location, err := time.LoadLocation(opts.WaterMarkTimezone)
+	if err != nil {
+		log.Printf("[ERROR] Error loading location: %s", err)
+	}
+	dc.DrawStringAnchored(time.Now().In(location).Format("2006-01-02 15:04"), W*0.2, H*0.03, 0.5, 0.5)
+
+	// Save the context as a new image
+	dc.Stroke()
+	return dc.SavePNG(outputPath)
 }
 
 func setupLog(dbg bool) {
