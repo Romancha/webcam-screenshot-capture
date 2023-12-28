@@ -113,18 +113,41 @@ func saveWebCamScreenshot(cam WebCam) {
 	}
 
 	// capture screenshot of the video
-	var buf []byte
-	if err := chromedp.Run(ctx, elementScreenshot(cam, &buf)); err != nil {
+	var screenshotBuf []byte
+	if err := chromedp.Run(ctx, elementScreenshot(cam, &screenshotBuf)); err != nil {
 		log.Printf("[ERROR] Error capturing screenshot: %s", err)
 		return
 	}
 
-	jpgImage, err := bimg.NewImage(buf).Convert(bimg.JPEG)
+	screenshotName := cam.Name + "_" + time.Now().Format("2006-01-02_15-04-05") + ".png"
+	pngImagePath := opts.SavePath + "/" + screenshotName
+	err = bimg.Write(pngImagePath, screenshotBuf)
+
+	if err != nil {
+		log.Printf("[ERROR] Error writing image: %s. %s", screenshotName, err)
+		return
+	}
+
+	// Add the date watermark
+	err = addDateWatermark(pngImagePath)
+	if err != nil {
+		log.Printf("[ERROR] Error adding watermark: %s", err)
+		return
+	}
+
+	imageWithWatermark, err := bimg.Read(pngImagePath)
+	if err != nil {
+		log.Printf("[ERROR] Error reading image with watermark: %s", err)
+		return
+	}
+
+	jpgImage, err := bimg.NewImage(imageWithWatermark).Convert(bimg.JPEG)
 	if err != nil {
 		log.Printf("[ERROR] Error converting image: %s", err)
 		return
 	}
 
+	// Compress the image after adding the watermark
 	compressOptions := bimg.Options{
 		Quality:      70,
 		Compression:  9,
@@ -136,23 +159,22 @@ func saveWebCamScreenshot(cam WebCam) {
 		return
 	}
 
-	screenshotName := cam.Name + "_" + time.Now().Format("2006-01-02_15-04-05") + ".jpg"
-	path := opts.SavePath + "/" + screenshotName
-	err = bimg.Write(path, compressedImage)
+	// Save the compressed image with .jpg extension
+	jpgImagePath := pngImagePath[:len(pngImagePath)-4] + ".jpg"
 
+	err = bimg.Write(jpgImagePath, compressedImage)
 	if err != nil {
-		log.Printf("[ERROR] Error writing image: %s. %s", screenshotName, err)
+		log.Printf("[ERROR] Error writing compressed image: %s. %s", screenshotName, err)
 		return
 	}
 
-	// Add the date watermark
-	err = addDateWatermark(path, path)
-	if err != nil {
-		log.Printf("[ERROR] Error adding watermark: %s", err)
-		return
-	}
+	log.Printf("[INFO] Saved screenshot to " + jpgImagePath)
 
-	log.Printf("[INFO] Saved screenshot to " + path)
+	//remove the original .png file
+	err = os.Remove(pngImagePath)
+	if err != nil {
+		log.Printf("[ERROR] Error removing original .png file: %s. %s", pngImagePath, err)
+	}
 
 	// Close the context
 	cancel()
@@ -164,7 +186,7 @@ func elementScreenshot(cam WebCam, res *[]byte) chromedp.Tasks {
 	}
 }
 
-func addDateWatermark(imagePath string, outputPath string) error {
+func addDateWatermark(imagePath string) error {
 	// Load the image
 	img, err := gg.LoadImage(imagePath)
 	if err != nil {
@@ -194,7 +216,7 @@ func addDateWatermark(imagePath string, outputPath string) error {
 
 	// Save the context as a new image
 	dc.Stroke()
-	return dc.SavePNG(outputPath)
+	return dc.SavePNG(imagePath)
 }
 
 func setupLog(dbg bool) {
